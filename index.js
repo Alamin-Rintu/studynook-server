@@ -25,6 +25,7 @@ async function run() {
 
     const db = client.db("studyNook");
     const roomsCollection = db.collection("rooms");
+    const bookingCollection = db.collection("booking");
 
     app.post("/rooms", async (req, res) => {
       const roomsData = req.body;
@@ -47,13 +48,22 @@ async function run() {
 
     app.get("/my-rooms/:id", async (req, res) => {
       const id = req.params.id;
-
       const query = {
         ownerId: id,
       };
-
       const result = await roomsCollection.find(query).toArray();
+      res.send(result);
+    });
 
+    app.post("/booking", async (req, res) => {
+      const bookingData = req.body;
+      const result = await bookingCollection.insertOne(bookingData);
+      res.send(result);
+    });
+
+    app.get("/booking/:userId", async (req, res) => {
+      const userId = req.params.userId;
+      const result = await bookingCollection.find({ userId }).toArray();
       res.send(result);
     });
 

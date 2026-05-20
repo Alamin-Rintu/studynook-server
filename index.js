@@ -55,17 +55,77 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/booking", async (req, res) => {
-      const bookingData = req.body;
-      const result = await bookingCollection.insertOne(bookingData);
+    app.delete("/rooms/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await roomsCollection.deleteOne(query);
       res.send(result);
+    });
+
+    app.patch("/rooms/:id", async (req, res) => {
+      const id = req.params.id;
+      const updateRoom = req.body;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: updateRoom,
+      };
+      const result = await roomsCollection.updateOne(query, update);
+      res.send(result);
+    });
+
+    app.post("/booking", async (req, res) => {
+      const { roomId, date, startTime, endTime, userId } = req.body;
+
+      const start = +startTime;
+      const end = +endTime;
+
+      if (!roomId || !date || !userId || start >= end) {
+        return res.status(400).send({
+          success: false,
+          message: "Invalid booking data",
+        });
+      }
+
+      const conflict = await bookingCollection.findOne({
+        roomId,
+        date,
+        startTime: { $lt: end },
+        endTime: { $gt: start },
+      });
+
+      if (conflict) {
+        return res.status(400).send({
+          success: false,
+          message: "This time slot is already booked",
+        });
+      }
+
+      const result = await bookingCollection.insertOne({
+        roomId,
+        userId,
+        date,
+        startTime: start,
+        endTime: end,
+        createdAt: new Date(),
+      });
+
+      res.send({
+        success: true,
+        message: "Booking successful",
+        id: result.insertedId,
+      });
     });
 
     app.get("/booking/:userId", async (req, res) => {
       const userId = req.params.userId;
-      const result = await bookingCollection.find({ userId }).toArray();
-      res.send(result);
+      const bookings = await bookingCollection
+        .find({ userId })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(bookings);
     });
+
 
     await client.db("admin").command({ ping: 1 });
     console.log(

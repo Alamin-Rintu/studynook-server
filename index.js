@@ -2,10 +2,28 @@ const express = require("express");
 const dotenv = require("dotenv");
 var cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 dotenv.config();
 
 const app = express();
-app.use(cors());
+// app.use(cors());
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://studynook-client-rho.vercel.app",
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 const port = process.env.PORT;
 
@@ -19,9 +37,35 @@ const client = new MongoClient(uri, {
   },
 });
 
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`),
+);
+
+const varifyToken = async (req, res, next) => {
+  const authHeader = req?.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  console.log(token);
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    console.log(payload);
+    next();
+  } catch (error) {
+    console.log(error);
+    return res.status(403).json({
+      message: "Forbidden",
+    });
+  }
+};
+
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("studyNook");
     const roomsCollection = db.collection("rooms");
@@ -39,20 +83,49 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/rooms/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await roomsCollection.findOne(query);
-      res.send(result);
+    app.get("/my-rooms/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const query = {
+          ownerId: id,
+        };
+
+        const result = await roomsCollection.find(query).toArray();
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
     });
 
-    app.get("/my-rooms/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = {
-        ownerId: id,
-      };
-      const result = await roomsCollection.find(query).toArray();
-      res.send(result);
+    app.get("/rooms/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({
+            success: false,
+            message: "Invalid room id",
+          });
+        }
+
+        const query = {
+          _id: new ObjectId(id),
+        };
+
+        const result = await roomsCollection.findOne(query);
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
     });
 
     app.delete("/rooms/:id", async (req, res) => {
@@ -73,8 +146,17 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/booking", async (req, res) => {
-      const { roomId, date, startTime, endTime, userId } = req.body;
+    app.post("/booking", varifyToken, async (req, res) => {
+      const {
+        roomId,
+        date,
+        startTime,
+        endTime,
+        userId,
+        roomName,
+        imageUrl,
+        pricePerHour,
+      } = req.body;
 
       const start = +startTime;
       const end = +endTime;
@@ -86,11 +168,15 @@ async function run() {
         });
       }
 
+      const totalHours = end - start;
+      const totalCost = totalHours * pricePerHour;
+
       const conflict = await bookingCollection.findOne({
         roomId,
         date,
         startTime: { $lt: end },
         endTime: { $gt: start },
+        status: "confirmed",
       });
 
       if (conflict) {
@@ -106,6 +192,15 @@ async function run() {
         date,
         startTime: start,
         endTime: end,
+
+        roomName,
+        imageUrl,
+        pricePerHour,
+        totalHours,
+        totalCost,
+
+        status: "confirmed",
+
         createdAt: new Date(),
       });
 
@@ -116,8 +211,9 @@ async function run() {
       });
     });
 
-    app.get("/booking/:userId", async (req, res) => {
+    app.get("/booking/:userId", varifyToken, async (req, res) => {
       const userId = req.params.userId;
+      console.log(userId);
       const bookings = await bookingCollection
         .find({ userId })
         .sort({ createdAt: -1 })
@@ -126,8 +222,17 @@ async function run() {
       res.send(bookings);
     });
 
+    app.delete("/booking/:id", async (req, res) => {
+      const id = req.params.id;
 
-    await client.db("admin").command({ ping: 1 });
+      const query = { _id: new ObjectId(id) };
+
+      const result = await bookingCollection.deleteOne(query);
+
+      res.send(result);
+    });
+
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );

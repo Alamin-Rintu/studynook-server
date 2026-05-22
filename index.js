@@ -72,35 +72,116 @@ async function run() {
     const bookingCollection = db.collection("booking");
 
     app.post("/rooms", async (req, res) => {
-      const roomsData = req.body;
-      const result = await roomsCollection.insertOne(roomsData);
-      res.send(result);
-    });
-
-    app.get("/rooms", async (req, res) => {
-      const cursor = roomsCollection.find();
-      const result = await cursor.toArray();
-      res.send(result);
-    });
-
-    app.get("/my-rooms/:id", async (req, res) => {
       try {
-        const id = req.params.id;
+        const roomsData = req.body;
 
-        const query = {
-          ownerId: id,
-        };
+        // FIX: always store number
+        roomsData.hourlyRate = Number(roomsData.hourlyRate);
 
-        const result = await roomsCollection.find(query).toArray();
+        const result = await roomsCollection.insertOne(roomsData);
 
         res.send(result);
       } catch (error) {
-        res.status(500).send({
-          success: false,
-          message: error.message,
-        });
+        console.log(error);
+        res.status(500).send({ success: false });
       }
     });
+
+ app.get("/roomsData", async (req, res) => {
+  try {
+    const { amenities, floor } = req.query;
+
+    let query = {};
+
+    // SEARCH
+    // if (search) {
+    //   query.roomName = {
+    //     $regex: search,
+    //     $options: "i",
+    //   };
+    // }
+
+    // AMENITIES
+    if (amenities) {
+      query.amenities = {
+        $in: amenities.split(","),
+      };
+    }
+
+    // FLOOR
+    if (floor) {
+      query.floor = floor;
+    }
+
+    const result = await roomsCollection.find(query).toArray();
+
+    res.send(result);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to fetch rooms",
+    });
+  }
+});
+
+app.get("/roomsData", async (req, res) => {
+  try {
+    const { search, amenities, floor } = req.query;
+console.log("check data",search, amenities, floor);
+    let query = {};
+
+    // SEARCH
+    if (search) {
+      query.roomName = {
+        $regex: search,
+        $options: "i",
+      };
+    }
+
+    // AMENITIES
+    if (amenities) {
+      query.amenities = {
+        $in: amenities.split(","),
+      };
+    }
+
+    // FLOOR
+    if (floor) {
+      query.floor = floor;
+    }
+
+    const result = await roomsCollection.find(query).toArray();
+
+    res.send(result);
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to fetch rooms",
+    });
+  }
+});
+
+    // app.get("/my-rooms/:id", async (req, res) => {
+    //   try {
+    //     const id = req.params.id;
+
+    //     const query = {
+    //       ownerId: id,
+    //     };
+
+    //     const result = await roomsCollection.find(query).toArray();
+
+    //     res.send(result);
+    //   } catch (error) {
+    //     res.status(500).send({
+    //       success: false,
+    //       message: error.message,
+    //     });
+    //   }
+    // });
 
     app.get("/rooms/:id", async (req, res) => {
       try {

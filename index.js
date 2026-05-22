@@ -55,7 +55,7 @@ async function run() {
     const roomsCollection = db.collection("rooms");
     const bookingCollection = db.collection("booking");
 
-    app.post("/rooms", async (req, res) => {
+    app.post("/rooms", varifyToken, async (req, res) => {
       try {
         const roomsData = req.body;
         console.log(roomsData, "from backend");
@@ -103,7 +103,7 @@ async function run() {
       }
     });
 
-    app.get("/my-rooms/:id", async (req, res) => {
+    app.get("/my-rooms/:id",  async (req, res) => {
       try {
         const id = req.params.id;
 
@@ -148,14 +148,14 @@ async function run() {
       }
     });
 
-    app.delete("/rooms/:id", async (req, res) => {
+    app.delete("/rooms/:id", varifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await roomsCollection.deleteOne(query);
       res.send(result);
     });
 
-    app.patch("/rooms/:id", async (req, res) => {
+    app.patch("/rooms/:id", varifyToken, async (req, res) => {
       const id = req.params.id;
       const updateRoom = req.body;
       const query = { _id: new ObjectId(id) };

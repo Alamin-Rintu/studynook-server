@@ -6,24 +6,8 @@ const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 dotenv.config();
 
 const app = express();
-// app.use(cors());
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://studynook-client-rho.vercel.app",
-];
+app.use(cors());
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  }),
-);
 app.use(express.json());
 const port = process.env.PORT;
 
@@ -74,8 +58,7 @@ async function run() {
     app.post("/rooms", async (req, res) => {
       try {
         const roomsData = req.body;
-
-        // FIX: always store number
+        console.log(roomsData, "from backend");
         roomsData.hourlyRate = Number(roomsData.hourlyRate);
 
         const result = await roomsCollection.insertOne(roomsData);
@@ -87,101 +70,57 @@ async function run() {
       }
     });
 
- app.get("/roomsData", async (req, res) => {
-  try {
-    const { amenities, floor } = req.query;
+    app.get("/rooms", async (req, res) => {
+      try {
+        const { search, amenities, floor } = req.query;
+        let query = {};
+        if (search) {
+          query.roomName = {
+            $regex: search,
+            $options: "i",
+          };
+        }
 
-    let query = {};
+        if (amenities) {
+          query.amenities = {
+            $in: amenities.split(","),
+          };
+        }
 
-    // SEARCH
-    // if (search) {
-    //   query.roomName = {
-    //     $regex: search,
-    //     $options: "i",
-    //   };
-    // }
+        if (floor) {
+          query.floor = floor;
+        }
 
-    // AMENITIES
-    if (amenities) {
-      query.amenities = {
-        $in: amenities.split(","),
-      };
-    }
+        const result = await roomsCollection.find(query).toArray();
 
-    // FLOOR
-    if (floor) {
-      query.floor = floor;
-    }
-
-    const result = await roomsCollection.find(query).toArray();
-
-    res.send(result);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({
-      success: false,
-      message: "Failed to fetch rooms",
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(500).send({
+          success: false,
+          message: "Failed to fetch rooms",
+        });
+      }
     });
-  }
-});
 
-app.get("/roomsData", async (req, res) => {
-  try {
-    const { search, amenities, floor } = req.query;
-console.log("check data",search, amenities, floor);
-    let query = {};
+    app.get("/my-rooms/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
 
-    // SEARCH
-    if (search) {
-      query.roomName = {
-        $regex: search,
-        $options: "i",
-      };
-    }
+        const query = {
+          ownerId: id,
+        };
 
-    // AMENITIES
-    if (amenities) {
-      query.amenities = {
-        $in: amenities.split(","),
-      };
-    }
+        const result = await roomsCollection.find(query).toArray();
 
-    // FLOOR
-    if (floor) {
-      query.floor = floor;
-    }
-
-    const result = await roomsCollection.find(query).toArray();
-
-    res.send(result);
-  } catch (error) {
-    console.log(error);
-
-    res.status(500).send({
-      success: false,
-      message: "Failed to fetch rooms",
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          message: error.message,
+        });
+      }
     });
-  }
-});
-
-    // app.get("/my-rooms/:id", async (req, res) => {
-    //   try {
-    //     const id = req.params.id;
-
-    //     const query = {
-    //       ownerId: id,
-    //     };
-
-    //     const result = await roomsCollection.find(query).toArray();
-
-    //     res.send(result);
-    //   } catch (error) {
-    //     res.status(500).send({
-    //       success: false,
-    //       message: error.message,
-    //     });
-    //   }
-    // });
 
     app.get("/rooms/:id", async (req, res) => {
       try {
